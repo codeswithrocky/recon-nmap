@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""
+recon-nmap - Automated Nmap Scan & Report Generator
+Version: 0.1.0
+"""
+
+import argparse
+import subprocess
+import sys
+import os
+import shutil
+import datetime
+import json
+import xml.etree.ElementTree as ET
+from html import escape
+
+VERSION = "0.1.0"
+
+# -----------------------
+# Helpers
+# -----------------------
+def timestamp():
+    return datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+def run_cmd(cmd, capture_stdout=False):
+    try:
+        if capture_stdout:
+            return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
+        else:
+            return subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Command failed: {' '.join(cmd)}", file=sys.stderr)
+        if e.stdout:
+            print(e.stdout, file=sys.stderr)
+        if e.stderr:
+            print(e.stderr, file=sys.stderr)
+        raise
+
+# -----------------------
+# Nmap execution
+# -----------------------
+def build_nmap_args(targets, scan_profile, extra_args, out_prefix):
+    """
+    Returns list for subprocess.run
+    """
+    base = ["nmap"]
+
+    # common flags for useful output
+    base += ["-oX", f"{out_prefix}.xml", "-oN", f"{out_prefix}.nmap", "-oG", f"{out_prefix}.gnmap"]
+
+    # profile -> add flags
+    if scan_profile == "quick":
+        base += ["-Pn", "--top-ports", "100", "-sV", "-T4"]
+    elif scan_profile == "stealth":
+        base += ["-sS", "-Pn", "-T2", "-sV"]
+    elif scan_profile == "full":
+        base += ["-A", "-p-", "-sV", "-O", "-T4"]
+    else:  # default
+        base += ["-sV", "-sC", "-T4"]
+
+    # any extra raw args
+    if extra_args:
+        base += extra_args
+
+    base += targets
+    return base
+
+# -----------------------
+# Parse nmap xml
+# -----------------------
+def parse_nmap_xml(xml_path):
+    if not os.path.exists(xml_path):
+        return {"error": "xml not found", "path": xml_path}
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+
+    # nmaprun children: host, scaninfo, runstats, etc.
+    hosts = []
+    for host in root.findall('host'):
+        host_dict = {}
+        # status
+        status = host.find('status')
+        if status is not None:
+            host_dict['state'] = status.get('state')
+
+        # addresses
+        addresses = []
+        for addr in host.findall('address'):
+            addrtype = addr.get('addrtype')
+            addresses.append({"addr": addr.get('addr'), "type": addrtype})
+        host_dict['addresses'] = addresses
+
+        # hostnames
+        names = []
+        hostnames = host.find('hostnames')
+        if hostnames is not None:
+            for hn in hostnames.findall('hostname'):
+                names.append({"name": hn.get('name'), "type": hn.get('type')})
+        host_dict['hostnames'] = names
+
+        # ports
+        ports_list = []
+        ports = host.find('ports')
+        if ports is not None:
+            for port in ports.findall('port'):
+                pnum = port.get('portid')
+                proto = port.get('protocol')
+                state = port.find('state').get('state') if port.find('state') is not None else None
+                service_el = port.find('service')
+                service = {}
+                if service_el is not None:
+                    service = {k:v for k,v in service_el.items()}
+                script_outputs = []
+                for script in port.findall('script'):
+                    script_outputs.append({"id": script.get('id'), "output": script.get('output')})
+                ports_list.append({"port": int(pnum), "protocol": proto, "state": state, "service": service, "scripts": script_outputs})
+        host_dict['ports'] = sorted(ports_list, key=lambda x: x['port'])
+
+        # os (bestguess)
+        os_el = host.find('os')
+        os_matches = []
+        if os_el is not None:
+            for om in os_el.findall('osmatch'):
+                os_matches.append({"name": om.get('name'), "accuracy": om.get('accuracy'), "line": om.get('line')})
+        host_dict['os'] = os_matches
+
+        hosts.append(host_dict)
+
+    # runstats
+    runstats = {}
+    runstats_el = root.find('runstats')
+    if runstats_el is not None:
+        finished = runstats_el.find('finished')
+        if finished is not None:
+            runstats['time'] = finished.get('time')
+            runstats['elapsed'] = finished.get('elapsed')
+            runstats['summary'] = finished.get('summary')
+    return {"hosts": hosts, "runstats": runstats}
+
+# -----------------------
+# HTML report generation
+# -----------------------
+HTML_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Recon Nmap Report - {title}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; margin:0; padding:0; background:#0f172a; color:#e6eef8}}
+.container{{max-width:1000px;margin:24px auto;padding:20px;background:#0b1220;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}}
+h1{{margin:0 0 8px 0}}
+.meta{{color:#9fb0d9;font-size:0.9rem;margin-bottom:12px}}
+.card{{background:#071027;padding:12px;border-radius:10px;margin-bottom:12px}}
+.kv{{display:flex;gap:8px;flex-wrap:wrap;font-size:0.95rem}}
+.kv span.key{{color:#7fb3ff;width:160px;display:inline-block}}
+.port{{padding:6px;background:#02122a;border-radius:8px;margin:6px 0;overflow:auto}}
+.badge{{display:inline-block;padding:3px 8px;border-radius:999px;background:#123456;color:#fff;font-size:0.8rem;margin-right:8px}}
+.small{{color:#9fb0d9;font-size:0.85rem}}
+pre{{white-space:pre-wrap;word-wrap:break-word;background:#021124;padding:10px;border-radius:6px;font-size:0.85rem;color:#dbeafe}}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Recon Nmap Report — {title}</h1>
+  <div class="meta">Generated: {generated} UTC &nbsp; | &nbsp; Profile: {profile} &nbsp; | &nbsp; Source XML: {xml_file}</div>
+
+  <div class="card">
+    <div class="kv"><span class="key">Targets</span><span>{targets}</span></div>
+    <div class="kv"><span class="key">Elapsed</span><span>{elapsed}</span></div>
+    <div class="kv"><span class="key">Summary</span><span>{summary}</span></div>
+  </div>
+
+  {host_blocks}
+
+  <footer class="small">recon-nmap {version} — run responsibly. Output files in {outdir}</footer>
+</div>
+</body>
+</html>
+"""
+
+HOST_BLOCK = """
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <strong>{hostname_or_addr}</strong>
+      <div class="small">{addresses}</div>
+    </div>
+    <div>
+      <span class="badge">{state}</span>
+      <div class="small">Ports: {port_count}</div>
+    </div>
+  </div>
+
+  <div style="margin-top:10px;">
+    {ports_html}
+  </div>
+
+  {os_html}
+
+</div>
+"""
+
+PORT_BLOCK = '<div class="port"><strong>{port}/{proto}</strong> &nbsp; <span class="small">state: {state}</span><br><span class="small">service: {service_name} {service_product}</span>{script_html}</div>'
+SCRIPT_BLOCK = '<div class="small" style="margin-top:8px;"><strong>Script:</strong> {id} — <pre>{output}</pre></div>'
+
+def build_report(parsed, targets, profile, xml_path, outdir):
+    hosts = parsed.get('hosts', [])
+    runstats = parsed.get('runstats', {})
+    host_blocks = []
+    for h in hosts:
+        addr_str = ", ".join([f"{a['addr']} ({a['type']})" for a in h.get('addresses', [])])
+        name = h.get('hostnames')
+        if name:
+            hostname_or_addr = name[0].get('name') if len(name)>0 and name[0].get('name') else addr_str
+        else:
+            hostname_or_addr = addr_str or "unknown"
+
+        ports_html = ""
+        for p in h.get('ports', []):
+            svc = p.get('service', {})
+            svcname = svc.get('name') or ""
+            svcprod = svc.get('product') or ""
+            script_html = ""
+            if p.get('scripts'):
+                for s in p['scripts']:
+                    script_html += SCRIPT_BLOCK.format(id=escape(s.get('id','')), output=escape(s.get('output','')))
+            ports_html += PORT_BLOCK.format(port=p['port'], proto=p['protocol'], state=p['state'] or "", service_name=escape(svcname), service_product=escape(svcprod), script_html=script_html)
+
+        os_html = ""
+        if h.get('os'):
+            os_rows = "<ul>" + "".join([f"<li>{escape(m['name'])} (accuracy {m.get('accuracy')})</li>" for m in h['os']]) + "</ul>"
+            os_html = f"<div class='small' style='margin-top:8px;'><strong>OS Matches:</strong>{os_rows}</div>"
+
+        hb = HOST_BLOCK.format(hostname_or_addr=escape(hostname_or_addr), addresses=escape(addr_str), state=escape(h.get('state','')), port_count=len(h.get('ports',[])), ports_html=ports_html or "<div class='small'>No open ports found</div>", os_html=os_html)
+        host_blocks.append(hb)
+
+    title = ", ".join(targets) if len(targets)<=3 else targets[0] + "..."
+    html = HTML_TEMPLATE.format(title=escape(title),
+                                generated=datetime.datetime.utcnow().isoformat() + "Z",
+                                profile=escape(profile),
+                                xml_file=escape(os.path.basename(xml_path)),
+                                targets=escape(", ".join(targets)),
+                                elapsed=escape(runstats.get('elapsed','-')),
+                                summary=escape(runstats.get('summary','-')),
+                                host_blocks="\n".join(host_blocks),
+                                version=escape(VERSION),
+                                outdir=escape(outdir))
+    return html
+
+# -----------------------
+# Main
+# -----------------------
+def main():
+    parser = argparse.ArgumentParser(prog="recon-nmap", description="Automated Nmap Scan & Report Generator")
+    parser.add_argument("-t","--targets", nargs="+", help="Targets (IP / CIDR / domain) OR use -iL to load from file", required=False)
+    parser.add_argument("-iL","--input-list", help="File with newline-separated targets")
+    parser.add_argument("-o","--outdir", default=f"./recon_nmap_{timestamp()}", help="Output directory")
+    parser.add_argument("-p","--profile", default="default", choices=["default","quick","stealth","full"], help="Scan profile preset")
+    parser.add_argument("--extra", nargs=argparse.REMAINDER, help="Extra arguments appended to nmap (be careful). Example: --extra -sU -p 53")
+    parser.add_argument("--no-run", action="store_true", help="Don't run nmap, only parse existing xml in outdir named <prefix>.xml (for testing)")
+    parser.add_argument("--prefix", default="scan", help="Filename prefix for nmap outputs (prefix.xml, prefix.nmap, prefix.gnmap)")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    args = parser.parse_args()
+
+    # checks
+    if not shutil.which("nmap") and not args.no_run:
+        print("[!] nmap binary not found. Please install nmap.", file=sys.stderr)
+        sys.exit(2)
+
+    targets = []
+    if args.input_list:
+        if not os.path.exists(args.input_list):
+            print(f"[!] input file not found: {args.input_list}", file=sys.stderr)
+            sys.exit(2)
+        with open(args.input_list, "r") as f:
+            targets = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+    if args.targets:
+        targets += args.targets
+    targets = [t for t in targets if t]
+    if not targets and not args.no_run:
+        print("[!] No targets provided. Use -t or -iL.", file=sys.stderr)
+        parser.print_help()
+        sys.exit(2)
+
+    outdir = os.path.abspath(args.outdir)
+    os.makedirs(outdir, exist_ok=True)
+    out_prefix = os.path.join(outdir, args.prefix)
+
+    xml_path = f"{out_prefix}.xml"
+
+    # Run nmap
+    if not args.no_run:
+        nmap_args = build_nmap_args(targets, args.profile, args.extra or [], out_prefix)
+        print("[*] Running nmap:", " ".join(nmap_args))
+        # Do the run; output files are written by nmap
+        try:
+            run_cmd(nmap_args)
+        except Exception as e:
+            print("[!] nmap failed or was interrupted.", file=sys.stderr)
+            sys.exit(3)
+    else:
+        if not os.path.exists(xml_path):
+            print(f"[!] --no-run specified but xml not found at {xml_path}", file=sys.stderr)
+            sys.exit(2)
+
+    # parse xml
+    print("[*] Parsing XML:", xml_path)
+    parsed = parse_nmap_xml(xml_path)
+
+    # Save JSON summary
+    json_path = f"{out_prefix}.summary.json"
+    with open(json_path, "w") as f:
+        json.dump(parsed, f, indent=2)
+    print(f"[+] JSON summary saved: {json_path}")
+
+    # Build HTML report
+    print("[*] Building HTML report...")
+    html = build_report(parsed, targets or ["(from xml)"], args.profile, xml_path, outdir)
+    html_path = f"{out_prefix}.report.html"
+    with open(html_path, "w") as f:
+        f.write(html)
+    print(f"[+] HTML report saved: {html_path}")
+
+    print("[+] All done. Outputs:")
+    for ext in (".xml", ".nmap", ".gnmap", ".summary.json", ".report.html"):
+        p = f"{out_prefix}{ext if ext.startswith('.') else '.'+ext}"
+        # fix duplication for .summary.json
+        if ext == ".summary.json":
+            p = json_path
+        if os.path.exists(p):
+            print("   -", p)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
+

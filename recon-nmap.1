@@ -1,0 +1,44 @@
+.\" Manpage for recon-nmap
+.TH RECON-NMAP 1 "October 2025" "recon-nmap 0.1.0" "User Commands"
+.SH NAME
+recon-nmap \- Automated Nmap Scan & Report Generator
+.SH SYNOPSIS
+.B recon-nmap
+[\-t targets \-iL file] [\-p profile] [\-o outdir] [\-\-extra ...]
+.SH DESCRIPTION
+recon-nmap runs nmap with sane defaults, saves XML/gnmap/nmap outputs,
+parses the XML to a JSON summary and builds a human-friendly HTML report.
+.SH OPTIONS
+.TP
+.B \-t ", " \-\-targets
+Space separated list of targets (IP / CIDR / domain).
+.TP
+.B \-iL ", " \-\-input-list
+File with newline-separated targets.
+.TP
+.B \-p ", " \-\-profile
+Scan preset: default, quick, stealth, full.
+.TP
+.B \-o ", " \-\-outdir
+Output directory. Defaults to recon_nmap_<timestamp>.
+.TP
+.B \-\-extra
+Extra nmap command-line arguments appended to the invocation.
+.TP
+.B \-\-no-run
+Do not execute nmap; parse existing XML in the outdir.
+.TP
+.B \-\-version
+Show version and exit.
+.SH EXAMPLES
+To run a full scan against example.com:
+.RS
+\$ recon-nmap -t example.com -p full -o ./reports/example
+.RE
+Parse an existing xml:
+.RS
+\$ recon-nmap --no-run -o ./reports/example
+.RE
+.SH AUTHOR
+Rocky
+
