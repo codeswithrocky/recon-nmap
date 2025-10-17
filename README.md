@@ -1,17 +1,4 @@
-Perfect — I understand! You want a **single `README.md`** that contains **everything in one place**, including:
 
-* Description
-* Requirements
-* Installation (script + manpage)
-* Usage
-* Outputs
-* Troubleshooting
-* Contribution
-* CI/GitHub guide
-* License
-* Contact
-
-Here’s a fully consolidated `README.md` ready to drop into your repo:
 
 ````markdown
 # recon-nmap
@@ -263,17 +250,11 @@ gh release create v0.1.0 --title "v0.1.0" --notes "Initial release"
 
 ## 📬 Contact / Security
 
-Bugs or security concerns: `support@codelivly.com` (replace with your contact). Prefer private disclosure before public.
+Bugs or security concerns: `support@codelivly.com` 
 
 ---
 
 Thanks — enjoy `recon-nmap`!
 
 ```
-
-This single `README.md` now **contains every instruction, manpage info, installation, usage, troubleshooting, CI, contribution, license, and GitHub guidance** — everything in one page.
-
-If you want, I can **also add a small section inside it that directly shows example HTML report screenshots** and file structure, so your users immediately know what to expect visually.  
-
-Do you want me to add that?
 ```
