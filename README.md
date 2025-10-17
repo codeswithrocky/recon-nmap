@@ -1,6 +1,3 @@
-
-
-````markdown
 # recon-nmap
 
 **Automated Nmap Scan & Report Generator**  
@@ -41,7 +38,7 @@ Ships as a single-file Python CLI `recon-nmap`. A man page `recon-nmap.1` is inc
 ```bash
 chmod +x recon-nmap
 sudo mv recon-nmap /usr/local/bin/recon-nmap
-````
+
 
 ### 2) Install manpage (optional)
 
@@ -256,5 +253,4 @@ Bugs or security concerns: `support@codelivly.com`
 
 Thanks — enjoy `recon-nmap`!
 
-```
 ```
