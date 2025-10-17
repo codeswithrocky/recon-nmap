@@ -8,7 +8,7 @@ Runs `nmap`, saves raw outputs, parses the XML to JSON, and produces a human-fri
 
 ---
 
-## ⚙️ What it does
+## What it does
 
 `recon-nmap` automates a typical Nmap workflow and saves multiple outputs:
 
@@ -20,11 +20,11 @@ Runs `nmap`, saves raw outputs, parses the XML to JSON, and produces a human-fri
 
 Ships as a single-file Python CLI `recon-nmap`. A man page `recon-nmap.1` is included.
 
-> **Important:** Only scan hosts/networks you have explicit permission to test. Unauthorized scanning can be illegal.
+> Important: Only scan hosts/networks you have explicit permission to test. Unauthorized scanning can be illegal.
 
 ---
 
-## 🔧 Requirements
+## Requirements
 
 - Python 3.8+  
 - `nmap` CLI installed and in your PATH  
@@ -32,18 +32,17 @@ Ships as a single-file Python CLI `recon-nmap`. A man page `recon-nmap.1` is inc
 
 ---
 
-## 📥 Installation
+## Installation
 
 ### 1) Install script
 ```bash
 chmod +x recon-nmap
 sudo mv recon-nmap /usr/local/bin/recon-nmap
-
+```
 
 ### 2) Install manpage (optional)
 
 **Linux (Debian/Ubuntu)**
-
 ```bash
 sudo cp recon-nmap.1 /usr/local/share/man/man1/
 sudo mandb
@@ -51,23 +50,23 @@ man recon-nmap
 ```
 
 **macOS**
-
 ```bash
 sudo cp recon-nmap.1 /usr/local/share/man/man1/
 man -M /usr/local/share/man recon-nmap
 ```
 
 ### 3) Uninstall
-
 ```bash
 sudo rm /usr/local/bin/recon-nmap
 sudo rm /usr/local/share/man/man1/recon-nmap.1
 sudo mandb   # optional (Debian/Ubuntu)
 ```
 
----
 
-## 🧭 Usage
+
+
+
+## Usage
 
 Basic single target:
 
@@ -117,7 +116,7 @@ recon-nmap --version
 
 ---
 
-## 🗂 Output
+## Output
 
 Example `--outdir ./reports/example` with default prefix `scan`:
 
@@ -133,7 +132,7 @@ Open `scan.report.html` in a browser.
 
 ---
 
-## 🛠 How it works
+## How it works
 
 1. Builds an `nmap` command with chosen profile and extra arguments.
 2. Runs `nmap` and generates `.xml`, `.nmap`, `.gnmap`.
@@ -142,13 +141,13 @@ Open `scan.report.html` in a browser.
 
 ---
 
-## ⚖️ Ethics & Legal
+## Ethics & Legal
 
 Scan only systems you own or have explicit authorization for. Unauthorized scanning is illegal.
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Add smoke tests (example: `tests/smoke_test.sh`):
 
@@ -168,7 +167,7 @@ chmod +x tests/smoke_test.sh
 
 ---
 
-## 🛟 Troubleshooting
+## Troubleshooting
 
 * **nmap not found** → Ensure `nmap` installed and in PATH
 * **XML parse errors** → Ensure `.xml` file exists and was fully written by nmap
@@ -177,80 +176,9 @@ chmod +x tests/smoke_test.sh
 
 ---
 
-## 🧩 Contributing
+## Contact / Security
 
-1. Fork repo
-2. Create branch: `git checkout -b feature/<name>`
-3. Add changes/tests
-4. Commit with descriptive message
-5. Open a Pull Request with summary and testing steps
-
-Coding style: Python 3.8+, follow PEP8. Optional: use `black`.
+Bugs or security concerns: `support@codelivly.com`
 
 ---
 
-## 🔁 CI / GitHub Actions
-
-Minimal workflow: lint & run smoke tests in `.github/workflows/ci.yml`.
-
----
-
-## 📦 Packaging (optional)
-
-* Move CLI into Python module
-* Add `setup.cfg`/`pyproject.toml`
-* Create entry point for pip install
-* Add tests & optionally publish to PyPI
-
----
-
-## 🧾 License
-
-MIT License — see `LICENSE`.
-
----
-
-## 📤 GitHub setup & push
-
-**Option A — GitHub web UI**
-
-1. Create repo
-2. Local commands:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit — recon-nmap v0.1.0"
-git branch -M main
-git remote add origin git@github.com:YOUR_USERNAME/recon-nmap.git
-git push -u origin main
-```
-
-**Option B — GitHub CLI**
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-gh repo create YOUR_USERNAME/recon-nmap --public --source=. --remote=origin --push
-```
-
-**Tag & release**
-
-```bash
-git tag -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
-gh release create v0.1.0 --title "v0.1.0" --notes "Initial release"
-```
-
----
-
-## 📬 Contact / Security
-
-Bugs or security concerns: `support@codelivly.com` 
-
----
-
-Thanks — enjoy `recon-nmap`!
-
-```
